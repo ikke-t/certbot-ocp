@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+#
+# This builds a container for creating and renewing SSL certs in OpenShift
+# project by utilizing Let's Encrypt certbot and NginX
+#
+
+set -o errexit
+shopt -s expand_aliases
+
+container=$(buildah from centos/nginx-18-centos7)
+alias brc="buildah run --user root $container"
+
+#
+# Get oc command line client
+#
+file=$(mktemp oc-XXXX)
+curl -sL https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz | \
+  tar xz --to-stdout --warning=no-unknown-keyword -f - \
+  openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit/oc > \
+  $file
+
+buildah copy $container $file /bin/oc
+rm $file
+brc chmod +x /bin/oc
+
+#
+# Install certbot tool
+#
+brc yum install --quiet -y \
+  https://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/e/epel-release-7-12.noarch.rpm
+brc yum install --quiet -y certbot
+brc yum update --quiet -y
+brc yum --quiet clean all
+
+brc mkdir /var/log/letsencrypt
+brc mkdir -p /opt/app-root/src/.well-known/acme-challenge
+brc chmod -R g+rw /etc/letsencrypt /opt/app-root/src/.well-known \
+    /var/log/letsencrypt /var/lib/letsencrypt
+
+#
+# create entrypoint starter script which starts nginx and runs certbot
+#
+file=$(mktemp start-XXXX)
+cat > $file <<EOF
+#!/bin/sh
+#start webservr
+/opt/rh/rh-nginx18/root/usr/sbin/nginx
+sleep 5
+
+# for all domains, do register
+for i in \$DOMS; do
+  # check if cert already exists and skip if so
+  if [ ! -d /etc/letsencrypt/live/\$i ]; then
+    /usr/bin/certbot certonly --webroot -w /opt/app-root/src \
+    --agree-tos -m \$EMAIL --deploy-hook /opt/app-root/patch.sh \
+    --non-interactive \
+    -d \$i
+  fi
+done
+
+# renew all existing ones if needed
+/usr/bin/certbot renew --deploy-hook /opt/app-root/patch.sh
+EOF
+
+buildah copy $container $file /opt/app-root/certs.sh
+rm $file
+brc chmod g+rx /opt/app-root/certs.sh
+
+#
+# do post hook for certbot that puts the certs and keys into routes
+#
+file=$(mktemp patch-XXXX)
+cat > $file <<EOF
+#!/bin/sh
+
+for i in \$DOMS; do
+  CERT_FILE=\$(ls /etc/letsencrypt/archive/\$i/cert*| \
+    sort -n|tail -1)
+  CERTIFICATE="\$(awk '{printf "%s\\\\n", \$0}' \$CERT_FILE)"
+  KEY_FILE=\$(ls /etc/letsencrypt/archive/\$i/privkey*| \
+    sort -n|tail -1)
+  KEY="\$(awk '{printf "%s\\\\n", \$0}' \${KEY_FILE})"
+  CABUNDLE_FILE=\$(ls /etc/letsencrypt/archive/\$i/fullchain*| \
+    sort -n|tail -1)
+  CABUNDLE=\$(awk '{printf "%s\\\\n", \$0}' \${CABUNDLE_FILE})
+
+  ROUTE=\$(echo \$i|tr '.' '-')
+
+  /usr/bin/oc patch "route/\${ROUTE}" \
+    -p '{"spec":{"tls":{"certificate":"'"\${CERTIFICATE}"'", \
+    "key":"'"\${KEY}"'", "caCertificate":"'"\${CABUNDLE}"'"}}}'
+done
+EOF
+
+buildah copy $container $file /opt/app-root/patch.sh
+brc chmod g+rx /opt/app-root/patch.sh
+rm $file
+
+brc sh -c 'echo alive > /opt/app-root/src/.well-known/acme-challenge/alive.html'
+
+buildah config --entrypoint /opt/app-root/certs.sh $container
+
+buildah commit --squash --format docker $container certbot-ocp:latest

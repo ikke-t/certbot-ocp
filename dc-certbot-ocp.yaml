@@ -1,0 +1,93 @@
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  creationTimestamp: null
+  generation: 1
+  labels:
+    app: certbot-ocp
+    app.kubernetes.io/component: certbot-ocp
+    app.kubernetes.io/instance: certbot-ocp
+    app.kubernetes.io/part-of: fevermap
+  name: certbot-ocp
+spec:
+  replicas: 0
+  revisionHistoryLimit: 3
+  selector:
+    app: certbot-ocp
+    deploymentconfig: certbot-ocp
+  strategy:
+    activeDeadlineSeconds: 21600
+    resources: {}
+    rollingParams:
+      intervalSeconds: 1
+      maxSurge: 25%
+      maxUnavailable: 25%
+      timeoutSeconds: 600
+      updatePeriodSeconds: 1
+    type: Rolling
+  template:
+    metadata:
+      labels:
+        app: certbot-ocp
+        deploymentconfig: certbot-ocp
+    spec:
+      containers:
+      - env:
+        - name: DOMS
+          value: 'app.apps.ocp4.example.com api.apps.ocp4.example.com'
+        - name: EMAIL
+          value: your_email@example.com
+        image: quay.io/fevermap/certbot-ocp:latest
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /.well-known/acme-challenge/alive.html
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 1
+          successThreshold: 1
+          timeoutSeconds: 2
+        name: certbot-ocp
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /.well-known/acme-challenge/alive.html
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/letsencrypt
+          name: letsencrypt
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: certbot
+      serviceAccountName: certbot
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: letsencrypt
+        persistentVolumeClaim:
+          claimName: certbot-letsencrypt
+  test: false
+  triggers:
+  - imageChangeParams:
+      automatic: true
+      containerNames:
+      - certbot-ocp
+      from:
+        kind: ImageStreamTag
+        name: certbot-ocp:latest
+        namespace: fevermap
+    type: ImageChange
+  - type: ConfigChange
