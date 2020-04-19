@@ -50,10 +50,16 @@ So you end up having for each FQDN the routes
 * first-my-example-com, which will be updated with SSL certs by this utility
 * certbot-first-my-example-com, which grabs the acme-challenges to certbot tool
 
-## peristence
+## Persistence
 
 Deoployment conf may scaled to 0 when task is done, persistent data for certbot
 will be saved in OpenShift persistent volume.
+
+## Service account
+
+oc -command will be used to modify the OpenShift route to include the
+certificates. Fort that reason we create certbot-ocp service account to have
+editing permission for the container.
 
 # Running the container
 
@@ -74,6 +80,8 @@ and run:
 ```
 oc create -f pvc-certbot-letsencrypt.yaml
 oc create -f dc-certbot-ocp.yaml
+oc create sa certbot
+oc adm policy add-role-to-user edit -z certbot
 oc create route edge first-my-example-com \
   --hostname=first.my.example.com \
   --service=frontend
