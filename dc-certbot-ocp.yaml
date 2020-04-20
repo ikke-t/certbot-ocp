@@ -69,7 +69,7 @@ spec:
         - mountPath: /etc/letsencrypt
           name: letsencrypt
       dnsPolicy: ClusterFirst
-      restartPolicy: Always
+      restartPolicy: Never
       schedulerName: default-scheduler
       securityContext: {}
       serviceAccount: certbot
