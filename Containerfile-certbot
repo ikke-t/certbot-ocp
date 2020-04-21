@@ -149,50 +149,6 @@ else
 fi
 EOF
 
-buildah copy $container $file /opt/app-root/certs.sh
-rm $file
-brc chmod g+rx /opt/app-root/certs.sh
-
-#
-# do post hook for certbot that puts the certs and keys into routes
-#
-file=$(mktemp patch-XXXX)
-cat > $file <<EOF
-#!/bin/env bash
-# just in case, get the renewed domains into array,
-# even though we should only get one.
-IFS=' ' read -ra fqdns <<< \$RENEWED_DOMAINS
-
-CERT_FILE=\${RENEWED_LINEAGE}/cert.pem
-CERTIFICATE="\$(awk '{printf "%s\\\\n", \$0}' \${CERT_FILE})"
-KEY_FILE=\${RENEWED_LINEAGE}/privkey.pem
-KEY="\$(awk '{printf "%s\\\\n", \$0}' \${KEY_FILE})"
-CABUNDLE_FILE=\${RENEWED_LINEAGE}/fullchain.pem
-CABUNDLE=\$(awk '{printf "%s\\\\n", \$0}' \${CABUNDLE_FILE})
-
-# find out the ocp route name from the array of routes and their fqdn
-while read route; do
-  IFS=' ' read -ra ary <<< \$route
-    if [[ "\${fqdns[0]}" == "\${ary[1]}" ]]; then
-      ROUTE=\${ary[0]}
-      break
-    fi
-done < /tmp/routes.txt
-
-if [[ -n "\${ROUTE}" && -n "\${CERTIFICATE}" && -n "\${CABUNDLE}" ]]; then
-  /usr/bin/oc patch "route/\${ROUTE}" \
-   -p '{"spec":{"tls":{"certificate":"'"\${CERTIFICATE}"'", \
-   "key":"'"\${KEY}"'", "caCertificate":"'"\${CABUNDLE}"'"}}}'
-else
-  echo "problem with one of the variables:"
-  echo "route: \${ROUTE}"
-  echo "certificate: \${CERTIFICATE}"
-  echo "key:\${KEY}"
-  echo "caCertificate: \${CABUNDLE}"
-  exit 1
-fi
-EOF
-
 buildah copy $container $file /opt/app-root/patch.sh
 brc chmod g+rx /opt/app-root/patch.sh
 rm $file
