@@ -53,6 +53,37 @@ editing permission for the container.
 
 # Running the container
 
+## Ansible playbook
+
+Download the
+[ansible playbook]
+(https://raw.githubusercontent.com/ikke-t/cerbot-ocp/master/certbot-playbook.yml)
+in this repo, and run it:
+
+```
+ansible-playbook certbot-playbook.yml \
+-i "localhost ansible_connection=local", \
+-c local \
+-e api_url=https://api.example.com:6443 -e user=your_ocp_username \
+-e api_key=$(oc whoami -t) \
+-e project_name=fevermap \
+-e cb_extra_opts='--test' \
+-e cb_email=you@example.com \
+-e state=present
+```
+
+> Just for safety, the above one uses --test option, which is not rate limited
+> and creates fake certs. Replace it with empty string ```''``` for production.
+
+While you decommission it, change present to absent and rerun the playbook.
+Until playbook is fixed, you also need to clean up the generated routes:
+
+```
+oc delete all -l app=certbot-ocp
+```
+
+## Manual way
+
 Apply the deployment config from this repo. Add the env variables first
 according to above description.
 
