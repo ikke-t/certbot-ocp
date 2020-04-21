@@ -8,6 +8,21 @@ the certificates.
 This utility container is stored at
 [quay.io/fevermap/certbot-ocp](https://quay.io/repository/fevermap/certbot-ocp?tab=info)
 
+# How does it work?
+
+I created an container that runs NGINX and certbot. When the container starts
+it scans all the routes in OpenShift project. Those routes that have been
+labeled with ```letsencrypt-me=true``` will be listed.
+
+Container will create acme-challenge routes for the the domains, and it will
+handle the certbot requests for all the domains. SSL certs are stored to
+persistent storage for further renewals.
+
+Once all certs are acquired, they will be patched to the application routes.
+Now you have SSL certs which are valid for 90 days. When ever container is
+rerun, it will renew the certs that need renewing. And again updates the routes
+with fresh certs.
+
 # Usage
 
 At the moment this is work in process. It requires manual starts. For later,
