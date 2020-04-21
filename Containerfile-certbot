@@ -3,6 +3,18 @@
 # This builds a container for creating and renewing SSL certs in OpenShift
 # project by utilizing Let's Encrypt certbot and NginX
 #
+# Mandatory Parameters:
+#
+# * EMAIL: passed to Let's Encrypt via certbot.
+#
+# Optional Parameters:
+#
+# * ROUTE_LABEL: as parameter to recognize which routes to setup SSL for.
+# * CERTBOT_EXTRA_OPTS: passes additional parameters for certbot.
+#   E.g. --test would be good while practising.
+# * TRASH_ALL: deletes all /etc/letsencrypt contents. Used to force getting
+#   new certs.
+#
 
 set -o errexit
 shopt -s expand_aliases
@@ -42,21 +54,52 @@ brc chmod -R g+rw /etc/letsencrypt /opt/app-root/src/.well-known \
 #
 file=$(mktemp start-XXXX)
 cat > $file <<EOF
-#!/bin/sh
-#start webservr
+#!/bin/env bash
+# start webserver
 /opt/rh/rh-nginx18/root/usr/sbin/nginx
-sleep 5
+
+label="${ROUTE_LABEL:-letsencrypt-me=true}"
+
+if [ "\$TRASH_ALL" == "true" ]; then
+  echo "delete all old certs"
+  rm -rf /etc/letsencrypt/*
+fi
 
 # for all domains, do register
-for i in \$DOMS; do
-  # check if cert already exists and skip if so
-  if [ ! -d /etc/letsencrypt/live/\$i ]; then
+oc get routes -l \$label \
+  -o custom-columns="name:.metadata.name, hostname:.spec.host" --no-headers \
+  > /tmp/routes.txt
+i=0
+while read route; do
+  echo \$route
+  IFS=' ' read -ra ary <<< \$route
+  echo "check if route for for \${ary[0]}-acme-challenge"
+  if [ ! $(oc get route "\${ary[0]}-acme-challenge" &> /dev/null) ]; then
+    echo "exposing service for \${ary[0]}-acme-challenge"
+    oc expose service certbot-ocp \
+      --path=/.well-known/acme-challenge \
+      --port=8080 \
+      --name="\${ary[0]}-acme-challenge" \
+      --hostname=\${ary[1]}
+    echo "return value of expose: \$?"
+  fi
+  echo check acme-challenge is up for: \${ary[0]},\${ary[1]}
+  until [[ \$(curl --output /dev/null --silent --head --fail \
+    http://\${ary[1]}/.well-known/acme-challenge/alive.html) ]] || \
+    [[ \$i -eq 10 ]]; do
+    printf '.'
+    sleep 2
+    i=\$((\$i+1))
+  done
+  if [ ! -d /etc/letsencrypt/live/\${ary[1]} ]; then
+    echo asking for certs
     /usr/bin/certbot certonly --webroot -w /opt/app-root/src \
     --agree-tos -m \$EMAIL --deploy-hook /opt/app-root/patch.sh \
-    --non-interactive \
-    -d \$i
+    -n \$CERTBOT_EXTRA_OPTS \
+    -d \${ary[1]}
+    echo result from certs: $?
   fi
-done
+done < /tmp/routes.txt
 
 # renew all existing ones if needed
 /usr/bin/certbot renew --deploy-hook /opt/app-root/patch.sh
@@ -71,25 +114,83 @@ brc chmod g+rx /opt/app-root/certs.sh
 #
 file=$(mktemp patch-XXXX)
 cat > $file <<EOF
-#!/bin/sh
+#!/bin/env bash
+# just in case, get the renewed domains into array,
+# even though we should only get one.
+IFS=' ' read -ra fqdns <<< \$RENEWED_DOMAINS
 
-for i in \$DOMS; do
-  CERT_FILE=\$(ls /etc/letsencrypt/archive/\$i/cert*| \
-    sort -n|tail -1)
-  CERTIFICATE="\$(awk '{printf "%s\\\\n", \$0}' \$CERT_FILE)"
-  KEY_FILE=\$(ls /etc/letsencrypt/archive/\$i/privkey*| \
-    sort -n|tail -1)
-  KEY="\$(awk '{printf "%s\\\\n", \$0}' \${KEY_FILE})"
-  CABUNDLE_FILE=\$(ls /etc/letsencrypt/archive/\$i/fullchain*| \
-    sort -n|tail -1)
-  CABUNDLE=\$(awk '{printf "%s\\\\n", \$0}' \${CABUNDLE_FILE})
+CERT_FILE=\${RENEWED_LINEAGE}/cert.pem
+CERTIFICATE="\$(awk '{printf "%s\\\\n", \$0}' \${CERT_FILE})"
+KEY_FILE=\${RENEWED_LINEAGE}/privkey.pem
+KEY="\$(awk '{printf "%s\\\\n", \$0}' \${KEY_FILE})"
+CABUNDLE_FILE=\${RENEWED_LINEAGE}/fullchain.pem
+CABUNDLE=\$(awk '{printf "%s\\\\n", \$0}' \${CABUNDLE_FILE})
 
-  ROUTE=\$(echo \$i|tr '.' '-')
+# find out the ocp route name from the array of routes and their fqdn
+while read route; do
+  IFS=' ' read -ra ary <<< \$route
+    if [[ "\${fqdns[0]}" == "\${ary[1]}" ]]; then
+      ROUTE=\${ary[0]}
+      break
+    fi
+done < /tmp/routes.txt
 
+if [[ -n "\${ROUTE}" && -n "\${CERTIFICATE}" && -n "\${CABUNDLE}" ]]; then
   /usr/bin/oc patch "route/\${ROUTE}" \
-    -p '{"spec":{"tls":{"certificate":"'"\${CERTIFICATE}"'", \
-    "key":"'"\${KEY}"'", "caCertificate":"'"\${CABUNDLE}"'"}}}'
-done
+   -p '{"spec":{"tls":{"certificate":"'"\${CERTIFICATE}"'", \
+   "key":"'"\${KEY}"'", "caCertificate":"'"\${CABUNDLE}"'"}}}'
+else
+  echo "problem with one of the variables:"
+  echo "route: \${ROUTE}"
+  echo "certificate: \${CERTIFICATE}"
+  echo "key:\${KEY}"
+  echo "caCertificate: \${CABUNDLE}"
+  exit 1
+fi
+EOF
+
+buildah copy $container $file /opt/app-root/certs.sh
+rm $file
+brc chmod g+rx /opt/app-root/certs.sh
+
+#
+# do post hook for certbot that puts the certs and keys into routes
+#
+file=$(mktemp patch-XXXX)
+cat > $file <<EOF
+#!/bin/env bash
+# just in case, get the renewed domains into array,
+# even though we should only get one.
+IFS=' ' read -ra fqdns <<< \$RENEWED_DOMAINS
+
+CERT_FILE=\${RENEWED_LINEAGE}/cert.pem
+CERTIFICATE="\$(awk '{printf "%s\\\\n", \$0}' \${CERT_FILE})"
+KEY_FILE=\${RENEWED_LINEAGE}/privkey.pem
+KEY="\$(awk '{printf "%s\\\\n", \$0}' \${KEY_FILE})"
+CABUNDLE_FILE=\${RENEWED_LINEAGE}/fullchain.pem
+CABUNDLE=\$(awk '{printf "%s\\\\n", \$0}' \${CABUNDLE_FILE})
+
+# find out the ocp route name from the array of routes and their fqdn
+while read route; do
+  IFS=' ' read -ra ary <<< \$route
+    if [[ "\${fqdns[0]}" == "\${ary[1]}" ]]; then
+      ROUTE=\${ary[0]}
+      break
+    fi
+done < /tmp/routes.txt
+
+if [[ -n "\${ROUTE}" && -n "\${CERTIFICATE}" && -n "\${CABUNDLE}" ]]; then
+  /usr/bin/oc patch "route/\${ROUTE}" \
+   -p '{"spec":{"tls":{"certificate":"'"\${CERTIFICATE}"'", \
+   "key":"'"\${KEY}"'", "caCertificate":"'"\${CABUNDLE}"'"}}}'
+else
+  echo "problem with one of the variables:"
+  echo "route: \${ROUTE}"
+  echo "certificate: \${CERTIFICATE}"
+  echo "key:\${KEY}"
+  echo "caCertificate: \${CABUNDLE}"
+  exit 1
+fi
 EOF
 
 buildah copy $container $file /opt/app-root/patch.sh
@@ -100,4 +201,4 @@ brc sh -c 'echo alive > /opt/app-root/src/.well-known/acme-challenge/alive.html'
 
 buildah config --entrypoint /opt/app-root/certs.sh $container
 
-buildah commit --squash --format docker $container certbot-ocp:latest
+buildah commit $container certbot-ocp:latest

@@ -17,42 +17,32 @@ operator would be nice. Contributions welcome :)
 
 The following environment variables are required:
 
-* **DOMS**: Space separated list of domain names for certificates.
-  Can be also just one domain. E.g. "first.my.example.com second.my.example.com"
 * **EMAIL**: Your email address used for the
   [Let's Encrypt](https://letsencrypt.org/) account
 
+Optional Parameters:
+
+* **ROUTE_LABEL**: a label in routes to recognize which routes to setup SSL for.
+* **CERTBOT_EXTRA_OPTS**: passes additional parameters for certbot.
+  E.g. --test would be good while just trying out before production.
+* **TRASH_ALL**: deletes all /etc/letsencrypt contents. Used to force getting
+  new certs. Good to use while testing the service.
+
 ## OpenShift routes
 
-This utility expects that some preconditions are met. You need to name your
-public routes for your servicess according to FQDN, dots changed to hyphens,
+This utility looks for routes labelled in certain way. You need to label your
+public routes for your services with label ```letsencrypt-me=true```, or
+according to your custom label from env ROUTE_LABEL.
+
 E.g:
 
 ```
-oc create route edge first-my-example-com \
-  --hostname=first.my.example.com \
-  --service=frontend
+oc label route fevermap-app letsencrypt-me=true
 ```
-
-And for each such route you need to create additional route for this utility
-to be able to catch the acme-challenges:
-
-```
-oc expose service certbot-ocp \
-  --path=/.well-known/acme-challenge \
-  --port=8080 \
-  --name=certbot-first-my-example-com \
-  --hostname=first.my.example.com
-```
-
-So you end up having for each FQDN the routes
-
-* first-my-example-com, which will be updated with SSL certs by this utility
-* certbot-first-my-example-com, which grabs the acme-challenges to certbot tool
 
 ## Persistence
 
-Deoployment conf may scaled to 0 when task is done, persistent data for certbot
+Deployment conf may scaled to 0 when task is done, persistent data for certbot
 will be saved in OpenShift persistent volume.
 
 ## Service account
@@ -69,11 +59,13 @@ according to above description.
 In dc-certbot-ocp.yaml, change the values:
 ```
       - env:
-        - name: DOMS
-          value: 'app.apps.ocp4.example.com api.apps.ocp4.example.com'
         - name: EMAIL
           value: your_email@example.com
+        - name: CERTBOT_EXTRA_OPTS
+          value: '--test'
 ```
+
+> Note, above example will generate test certificates.
 
 and run:
 
@@ -82,14 +74,7 @@ oc create -f pvc-certbot-letsencrypt.yaml
 oc create -f dc-certbot-ocp.yaml
 oc create sa certbot
 oc adm policy add-role-to-user edit -z certbot
-oc create route edge first-my-example-com \
-  --hostname=first.my.example.com \
-  --service=frontend
-oc expose service certbot-ocp \
-  --path=/.well-known/acme-challenge \
-  --port=8080 \
-  --name=certbot-first-my-example-com \
-  --hostname=first.my.example.com
+oc expose dc certbot-ocp --port=8080
 oc scale --replicas=1 dc certbot-ocp
 ```
 
