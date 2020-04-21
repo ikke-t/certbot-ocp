@@ -56,8 +56,7 @@ editing permission for the container.
 ## Ansible playbook
 
 Download the
-[ansible playbook]
-(https://raw.githubusercontent.com/ikke-t/cerbot-ocp/master/certbot-playbook.yml)
+[ansible playbook](https://raw.githubusercontent.com/ikke-t/cerbot-ocp/master/certbot-playbook.yml)
 in this repo, and run it:
 
 ```
