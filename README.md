@@ -42,6 +42,7 @@ Optional Parameters:
   E.g. --test would be good while just trying out before production.
 * **TRASH_ALL**: deletes all /etc/letsencrypt contents. Used to force getting
   new certs. Good to use while testing the service.
+* **CERTBOT_SERVICE_NAME**: name of the certbot service, if empty defaults to certbot-ocp.
 
 ## OpenShift routes
 
@@ -104,7 +105,7 @@ used.
 Apply the deployment config from this repo. Add the env variables first
 according to above description.
 
-In dc-certbot-ocp.yaml, change the values:
+In pod-certbot-ocp.yaml and cronjob-certbot-ocp.yaml, change the values:
 ```
       - env:
         - name: EMAIL
@@ -118,26 +119,29 @@ In dc-certbot-ocp.yaml, change the values:
 and run:
 
 ```
-oc create -f pvc-certbot-letsencrypt.yaml
-oc create -f dc-certbot-ocp.yaml
-oc create sa certbot
-oc adm policy add-role-to-user edit -z certbot
-oc expose dc certbot-ocp --port=8080
-oc scale --replicas=1 dc certbot-ocp
+oc create -f manifests/role-certbot-ocp.yaml
+oc create -f manifests/sa-certbot-ocp.yaml
+oc adm policy add-role-to-user certbot-ocp -z certbot-ocp-sa
+oc create -f manifests/pvc-certbot-letsencrypt.yaml
+oc create -f manifests/pod-certbot-ocp.yaml
+oc create -f manifests/svc-certbot-ocp.yaml
 ```
 
-At the moment it keeps resapawning the container, which is bad. So just scale
-down the container to zero once certs are acquired. This should happen on the
-first run.
+Container runs once, and from container logs you can check did everything work. To check logs do following
 
 ```
-oc scale --replicas=0 dc certbot-ocp
+oc logs certbot-ocp
 ```
 
-And now, remember to scale it once up every 85 days. I hope until that I've
-automated all this :D
+If you need to run Pod again do following
+
+```
+oc delete po certbot-ocp && oc create -f manifests/pod-certbot-ocp.yaml
+```
+
+CronJob will start certbot container once per day and renew certiciates if needed. You can change job interval by modifying manifests/cronjob-certbot-ocp.yaml. There a filed called schedule.
 
 And to get rid of this alltogether, do:
 ```
-oc delete all -l app=certbot-ocp
+oc delete svc,pod,role,sa,cronjob,job,pvc -l app=certbot-ocp
 ```
