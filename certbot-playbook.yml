@@ -14,6 +14,7 @@
 # * cb_image - which container image and version to use
 # * cb_route_label - which label is used for finding the routes to SSL
 # * cb_extra_opts - any certbot extra options, like '--test'
+# * cb_service_name - optionally customize name for certbot service
 # * state present/absent
 #
 # e.g. K8S_AUTH_VERIFY_SSL=no ansible-playbook certbot-playbook.yml \
@@ -48,6 +49,8 @@
           apiVersion: v1
           kind: ServiceAccount
           metadata:
+            labels:
+              app: certbot-ocp
             name: "{{ certbot_sa }}"
             namespace: "{{ project_name }}"
 
@@ -62,18 +65,28 @@
           apiVersion: rbac.authorization.k8s.io/v1
           kind: Role
           metadata:
-            name: certbot
+            labels:
+              app: certbot-ocp
+            name: certbot-ocp
           rules:
           - apiGroups:
-              - route.openshift.io
+            - route.openshift.io
             resources:
-              - routes
+            - routes/custom-host
+            - routes
             verbs:
-              - patch
-              - create
-              - delete
-              - get
-              - list
+            - patch
+            - create
+            - delete
+            - get
+            - list
+          - apiGroups:
+            - ""
+            resources:
+            - services
+            verbs:
+            - list
+            - get
 
     - name: Bind certbot SA to role able to modify routes
       k8s:
@@ -97,7 +110,7 @@
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: Role
-            name: certbot
+            name: certbot-ocp
 
     - name: Create persistent volume for Let\'s Encrypt data
       k8s:
@@ -110,6 +123,8 @@
           apiVersion: v1
           kind: PersistentVolumeClaim
           metadata:
+            labels:
+              app: certbot-ocp
             finalizers:
             - kubernetes.io/pvc-protection
             name: certbot-letsencrypt
@@ -120,7 +135,7 @@
               requests:
                 storage: 20Mi
 
-    - name: Create Deployment Config for certbot service
+    - name: Create Pod for certbot
       k8s:
         state: "{{ state }}"
         host: "{{ api_url }}"
@@ -129,80 +144,64 @@
         namespace: "{{ project_name }}"
         definition:
           apiVersion: apps.openshift.io/v1
-          kind: DeploymentConfig
+          kind: Pod
           metadata:
             labels:
               app: certbot-ocp
-              app.kubernetes.io/component: certbot-ocp
-              app.kubernetes.io/instance: certbot-ocp
+              name: certbot-ocp
             name: certbot-ocp
           spec:
-            replicas: 0
-            revisionHistoryLimit: 3
-            selector:
-              app: certbot-ocp
-              deploymentconfig: certbot-ocp
-            strategy:
-              rollingParams:
-                intervalSeconds: 1
-                maxSurge: 25%
-                maxUnavailable: 25%
-                timeoutSeconds: 600
-                updatePeriodSeconds: 1
-              type: Rolling
-            template:
-              metadata:
-                labels:
-                  app: certbot-ocp
-                  deploymentconfig: certbot-ocp
-              spec:
-                containers:
-                - env:
-                  - name: ROUTE_LABEL
-                    value: "{{ cb_route_label }}"
-                  - name: EMAIL
-                    value: "{{ cb_email }}"
-                  - name: CERTBOT_EXTRA_OPTS
-                    value: "{{ cb_extra_opts }}"
-                  image: "{{ cb_image }}"
-                  imagePullPolicy: IfNotPresent
-                  livenessProbe:
-                    failureThreshold: 3
-                    httpGet:
-                      path: /.well-known/acme-challenge/alive.html
-                      port: 8080
-                      scheme: HTTP
-                    initialDelaySeconds: 5
-                    periodSeconds: 1
-                    successThreshold: 1
-                    timeoutSeconds: 2
-                  name: certbot-ocp
-                  ports:
-                  - containerPort: 8080
-                    protocol: TCP
-                  readinessProbe:
-                    failureThreshold: 3
-                    httpGet:
-                      path: /.well-known/acme-challenge/alive.html
-                      port: 8080
-                      scheme: HTTP
-                    initialDelaySeconds: 5
-                    periodSeconds: 10
-                    successThreshold: 1
-                    timeoutSeconds: 2
-                  volumeMounts:
-                  - mountPath: /etc/letsencrypt
-                    name: letsencrypt
-                dnsPolicy: ClusterFirst
-                restartPolicy: Always
-                serviceAccount: "{{ certbot_sa }}"
-                serviceAccountName: "{{ certbot_sa }}"
-                terminationGracePeriodSeconds: 10
-                volumes:
-                - name: letsencrypt
-                  persistentVolumeClaim:
-                    claimName: certbot-letsencrypt
-            test: false
+            containers:
+            - env:
+              - name: ROUTE_LABEL
+                value: "{{ cb_route_label }}"
+              - name: EMAIL
+                value: "{{ cb_email }}"
+              - name: CERTBOT_EXTRA_OPTS
+                value: "{{ cb_extra_opts }}"
+              image: "{{ cb_image }}"
+              imagePullPolicy: IfNotPresent
+              livenessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /.well-known/acme-challenge/alive.html
+                  port: 8080
+                  scheme: HTTP
+                initialDelaySeconds: 5
+                periodSeconds: 1
+                successThreshold: 1
+                timeoutSeconds: 2
+              name: certbot-ocp
+              ports:
+              - containerPort: 8080
+                protocol: TCP
+              resources:
+                limits:
+                  memory: 512Mi
+                requests:
+                  memory: 256Mi
+              readinessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /.well-known/acme-challenge/alive.html
+                  port: 8080
+                  scheme: HTTP
+                initialDelaySeconds: 5
+                periodSeconds: 10
+                successThreshold: 1
+                timeoutSeconds: 2
+              volumeMounts:
+              - mountPath: /etc/letsencrypt
+                name: letsencrypt
+            dnsPolicy: ClusterFirst
+            restartPolicy: Never
+            serviceAccount: "{{ certbot_sa }}"
+            serviceAccountName: "{{ certbot_sa }}"
+            terminationGracePeriodSeconds: 10
+            volumes:
+            - name: letsencrypt
+              persistentVolumeClaim:
+                claimName: certbot-letsencrypt
     - name: Create certbot service
       k8s:
         state: "{{ state }}"
@@ -224,10 +223,90 @@
               protocol: TCP
               targetPort: 8080
             selector:
-              deploymentconfig: certbot-ocp
+              name: certbot-ocp
             sessionAffinity: None
             type: ClusterIP
 
+    - name: Create cron job
+      k8s:
+        state: "{{ state }}"
+        host: "{{ api_url }}"
+        username: "{{ user }}"
+        api_key: "{{ api_key }}"
+        namespace: "{{ project_name }}"
+        definition:
+          apiVersion: batch/v1beta1
+          kind: CronJob
+          metadata:
+            labels:
+              app: certbot-ocp
+            name: certbot-ocp
+          spec:
+            concurrencyPolicy: Forbid
+            failedJobsHistoryLimit: 1
+            jobTemplate:
+              spec:
+                template:
+                  metadata:
+                    labels:
+                      parent: certbot-ocp
+                      name: certbot-ocp
+                      app: certbot-ocp
+                  spec:
+                    containers:
+                    - env:
+                      - name: ROUTE_LABEL
+                        value: "{{ cb_route_label }}"
+                      - name: EMAIL
+                        value: "{{ cb_email }}"
+                      - name: CERTBOT_EXTRA_OPTS
+                        value: "{{ cb_extra_opts }}"
+                      image: "{{ cb_image }}"
+                      imagePullPolicy: IfNotPresent
+                      livenessProbe:
+                        failureThreshold: 3
+                        httpGet:
+                          path: /.well-known/acme-challenge/alive.html
+                          port: 8080
+                          scheme: HTTP
+                        initialDelaySeconds: 5
+                        periodSeconds: 1
+                        successThreshold: 1
+                        timeoutSeconds: 2
+                      name: certbot-ocp
+                      ports:
+                      - containerPort: 8080
+                        protocol: TCP
+                      resources:
+                        limits:
+                          memory: 512Mi
+                        requests:
+                          memory: 256Mi
+                      readinessProbe:
+                        failureThreshold: 3
+                        httpGet:
+                          path: /.well-known/acme-challenge/alive.html
+                          port: 8080
+                          scheme: HTTP
+                        initialDelaySeconds: 5
+                        periodSeconds: 10
+                        successThreshold: 1
+                        timeoutSeconds: 2
+                      volumeMounts:
+                      - mountPath: /etc/letsencrypt
+                        name: letsencrypt
+                    dnsPolicy: ClusterFirst
+                    restartPolicy: Never
+                    serviceAccount: "{{ certbot_sa }}"
+                    serviceAccountName: "{{ certbot_sa }}"
+                    terminationGracePeriodSeconds: 10
+                    volumes:
+                    - name: letsencrypt
+                      persistentVolumeClaim:
+                        claimName: certbot-letsencrypt
+            schedule: '0 23 * * *'
+            successfulJobsHistoryLimit: 1
+            suspend: false
     # - name: Clean up generated routes
     #   tags: clean
     #   k8s:
