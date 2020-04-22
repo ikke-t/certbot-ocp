@@ -145,6 +145,11 @@ if [[ -n "\${ROUTE}" && -n "\${CERTIFICATE}" && -n "\${CABUNDLE}" ]]; then
   /usr/bin/oc patch "route/\${ROUTE}" \
    -p '{"spec":{"tls":{"certificate":"'"\${CERTIFICATE}"'", \
    "key":"'"\${KEY}"'", "caCertificate":"'"\${CABUNDLE}"'"}}}'
+  date --date="\$(openssl x509 -in \$CERT_FILE \ 
+   -noout -enddate | cut -d= -f 2)" --iso-8601
+  /usr/bin/oc patch "route/\${ROUTE}" \ 
+   -p '{"metadata":{"annotations": \ 
+   {"certbot-ocp/certiticate-expires":"'"\${date}"'"}}}'
 else
   echo "problem with one of the variables:"
   echo "route: \${ROUTE}"
