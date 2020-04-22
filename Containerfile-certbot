@@ -14,6 +14,7 @@
 #   E.g. --test would be good while practising.
 # * TRASH_ALL: deletes all /etc/letsencrypt contents. Used to force getting
 #   new certs.
+# * CERTBOT_SERVICE_NAME: certbot service name, defaults to certbot-ocp
 #
 
 set -o errexit
