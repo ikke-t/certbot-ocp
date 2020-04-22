@@ -89,12 +89,15 @@ ansible-playbook certbot-playbook.yml \
 > Just for safety, the above one uses --test option, which is not rate limited
 > and creates fake certs. Replace it with empty string ```''``` for production.
 
-While you decommission it, change present to absent and rerun the playbook.
-Until playbook is fixed, you also need to clean up the generated routes:
+At this moment there is no cron job done for kubernetes. So remember to scale
+manually the pod to 1 for running it, and to zero once done.
 
-```
-oc delete all -l app=certbot-ocp
-```
+While you decommission it, change present to absent and rerun the playbook.
+Note that this will also remove the cached certificate info from certbot,
+and it won't be possible to renew the existing certs. So scale it down to 0
+if you plan to renew certificates, and remove totally if your route is no longer
+used.
+
 
 ## Manual way
 
@@ -133,3 +136,8 @@ oc scale --replicas=0 dc certbot-ocp
 
 And now, remember to scale it once up every 85 days. I hope until that I've
 automated all this :D
+
+And to get rid of this alltogether, do:
+```
+oc delete all -l app=certbot-ocp
+```

@@ -80,6 +80,7 @@ while read route; do
       --path=/.well-known/acme-challenge \
       --port=8080 \
       --name="\${ary[0]}-acme-challenge" \
+      -l 'certbot-ocp-delete-me-if-found-later=true' \
       --hostname=\${ary[1]}
     echo "return value of expose: \$?"
   fi
@@ -103,6 +104,9 @@ done < /tmp/routes.txt
 
 # renew all existing ones if needed
 /usr/bin/certbot renew --deploy-hook /opt/app-root/patch.sh
+
+oc delete route -l certbot-ocp-delete-me-if-found-later=true
+
 EOF
 
 buildah copy $container $file /opt/app-root/certs.sh
