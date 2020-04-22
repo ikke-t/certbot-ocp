@@ -1,0 +1,26 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels: 
+    app: certbot-ocp
+  name: certbot-ocp
+rules:
+- apiGroups:
+  - route.openshift.io
+  resources:
+  - routes/custom-host 
+  - routes
+  verbs:
+  - patch
+  - create
+  - delete
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - list
+  - get
+  

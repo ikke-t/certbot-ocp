@@ -7,7 +7,6 @@ metadata:
     app: certbot-ocp
     app.kubernetes.io/component: certbot-ocp
     app.kubernetes.io/instance: certbot-ocp
-    app.kubernetes.io/part-of: fevermap
   name: certbot-ocp
 spec:
   replicas: 0

@@ -11,6 +11,6 @@ spec:
     protocol: TCP
     targetPort: 8080
   selector:
-    deploymentconfig: certbot-ocp
+    name: certbot-ocp
   sessionAffinity: None
   type: ClusterIP
