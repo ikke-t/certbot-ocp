@@ -42,6 +42,7 @@ Optional Parameters:
   E.g. --test would be good while just trying out before production.
 * **TRASH_ALL**: deletes all /etc/letsencrypt contents. Used to force getting
   new certs. Good to use while testing the service.
+* **CERTBOT_SERVICE_NAME**: name of the certbot service, if empty defaults to certbot-ocp.
 
 ## OpenShift routes
 

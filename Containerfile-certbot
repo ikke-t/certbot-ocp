@@ -59,6 +59,7 @@ cat > $file <<EOF
 /opt/rh/rh-nginx18/root/usr/sbin/nginx
 
 label="${ROUTE_LABEL:-letsencrypt-me=true}"
+svcname="${CERTBOT_SERVICE_NAME:-certbot-ocp}"
 
 if [ "\$TRASH_ALL" == "true" ]; then
   echo "delete all old certs"
@@ -76,7 +77,7 @@ while read route; do
   echo "check if route for for \${ary[0]}-acme-challenge"
   if [ ! $(oc get route "\${ary[0]}-acme-challenge" &> /dev/null) ]; then
     echo "exposing service for \${ary[0]}-acme-challenge"
-    oc expose service certbot-ocp \
+    oc expose service \$svcname \
       --path=/.well-known/acme-challenge \
       --port=8080 \
       --name="\${ary[0]}-acme-challenge" \
