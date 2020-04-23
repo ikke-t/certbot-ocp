@@ -18,7 +18,7 @@
 # * state present/absent
 #
 # e.g. K8S_AUTH_VERIFY_SSL=no ansible-playbook certbot-playbook.yml \
-#        -i "localhost ansible_connection=local" \
+#        -i "localhost ansible_connection=local", \
 #        -c local
 #        -e api_url=https://api.ocp.fi -e user=kube-admin \
 #        -e api_key=SMj1HWD9bJrEnvTR0JLR-EMGeeb_eDsaMnB-92-skno \
@@ -33,7 +33,7 @@
   vars:
     ansible_python_interpreter: /usr/bin/python3
     certbot_sa: certbot
-    cb_image: quay.io/fevermap/certbot-ocp:latest
+    cb_image: quay.io/fevermap/certbot-ocp:cronjob1
     cb_route_label: 'letsencrypt-me=true'
     cb_extra_opts: '--test'
   tasks:
@@ -116,36 +116,36 @@
             name: certbot-ocp
           spec:
             containers:
-              - env:
-                  - name: ROUTE_LABEL
-                    value: "{{ cb_route_label }}"
-                  - name: EMAIL
-                    value: "{{ cb_email }}"
-                  - name: CERTBOT_EXTRA_OPTS
-                    value: "{{ cb_extra_opts }}"
-                image: "{{ cb_image }}"
-                imagePullPolicy: IfNotPresent
-                name: certbot-ocp
-                ports:
-                  - containerPort: 8080
-                    protocol: TCP
-                resources:
-                  limits:
-                    memory: 512Mi
-                  requests:
-                    memory: 256Mi
-                volumeMounts:
-                  - mountPath: /etc/letsencrypt
-                    name: letsencrypt
+            - env:
+              - name: ROUTE_LABEL
+                value: "{{ cb_route_label }}"
+              - name: EMAIL
+                value: "{{ cb_email }}"
+              - name: CERTBOT_EXTRA_OPTS
+                value: "{{ cb_extra_opts }}"
+              image: "{{ cb_image }}"
+              imagePullPolicy: IfNotPresent
+              name: certbot-ocp
+              ports:
+              - containerPort: 8080
+                protocol: TCP
+              resources:
+                limits:
+                  memory: 512Mi
+                requests:
+                  memory: 256Mi
+              volumeMounts:
+              - mountPath: /etc/letsencrypt
+                name: letsencrypt
             dnsPolicy: ClusterFirst
             restartPolicy: Never
             serviceAccount: "{{ certbot_sa }}"
             serviceAccountName: "{{ certbot_sa }}"
             terminationGracePeriodSeconds: 10
             volumes:
-              - name: letsencrypt
-                persistentVolumeClaim:
-                  claimName: certbot-letsencrypt
+            - name: letsencrypt
+              persistentVolumeClaim:
+                claimName: certbot-letsencrypt
     - name: Create certbot service
       k8s:
         state: "{{ state }}"
@@ -198,36 +198,36 @@
                       app: certbot-ocp
                   spec:
                     containers:
-                      - env:
-                          - name: ROUTE_LABEL
-                            value: "{{ cb_route_label }}"
-                          - name: EMAIL
-                            value: "{{ cb_email }}"
-                          - name: CERTBOT_EXTRA_OPTS
-                            value: "{{ cb_extra_opts }}"
-                        image: "{{ cb_image }}"
-                        imagePullPolicy: IfNotPresent
-                        name: certbot-ocp
-                        ports:
-                          - containerPort: 8080
-                            protocol: TCP
-                        resources:
-                          limits:
-                            memory: 512Mi
-                          requests:
-                            memory: 256Mi
-                        volumeMounts:
-                          - mountPath: /etc/letsencrypt
-                            name: letsencrypt
+                    - env:
+                      - name: ROUTE_LABEL
+                        value: "{{ cb_route_label }}"
+                      - name: EMAIL
+                        value: "{{ cb_email }}"
+                      - name: CERTBOT_EXTRA_OPTS
+                        value: "{{ cb_extra_opts }}"
+                      image: "{{ cb_image }}"
+                      imagePullPolicy: IfNotPresent
+                      name: certbot-ocp
+                      ports:
+                      - containerPort: 8080
+                        protocol: TCP
+                      resources:
+                        limits:
+                          memory: 512Mi
+                        requests:
+                          memory: 256Mi
+                      volumeMounts:
+                      - mountPath: /etc/letsencrypt
+                        name: letsencrypt
                     dnsPolicy: ClusterFirst
                     restartPolicy: Never
                     serviceAccount: "{{ certbot_sa }}"
                     serviceAccountName: "{{ certbot_sa }}"
                     terminationGracePeriodSeconds: 10
                     volumes:
-                      - name: letsencrypt
-                        persistentVolumeClaim:
-                          claimName: certbot-letsencrypt
+                    - name: letsencrypt
+                      persistentVolumeClaim:
+                        claimName: certbot-letsencrypt
             schedule: '0 23 * * *'
             successfulJobsHistoryLimit: 1
             suspend: false
