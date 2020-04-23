@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # This builds a container for creating and renewing SSL certs in OpenShift
-# project by utilizing Let's Encrypt certbot and NginX
+# project by utilizing Let's Encrypt certbot and Apache
 #
 # Mandatory Parameters:
 #
@@ -20,12 +20,19 @@
 set -o errexit
 shopt -s expand_aliases
 
-container=$(buildah from centos/nginx-18-centos7)
+echo 'get container base image'
+container=$(buildah from ubi8/ubi-minimal)
 alias brc="buildah run --user root $container"
+
+echo 'install packages'
+brc microdnf install openssl python3-pip httpd >/dev/null
+brc microdnf clean all
+brc sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
 
 #
 # Get oc command line client
 #
+echo 'install oc-client'
 file=$(mktemp oc-XXXX)
 curl -sL https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz | \
   tar xz --to-stdout --warning=no-unknown-keyword -f - \
@@ -39,17 +46,16 @@ brc chmod +x /bin/oc
 #
 # Install certbot tool
 #
-brc yum install --quiet -y \
-  https://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/e/epel-release-7-12.noarch.rpm
-brc yum install --quiet -y certbot
-brc yum update --quiet -y
-brc yum --quiet clean all
+echo 'install certbot tool'
+brc pip3 install certbot
+brc mkdir /var/log/letsencrypt /etc/letsencrypt /var/lib/letsencrypt
+brc mkdir -p /var/www/html/.well-known/acme-challenge
+brc chgrp root /var/run/httpd /var/lib/httpd
+brc chmod -R g+rw /etc/letsencrypt /var/www/html/.well-known \
+    /var/log/letsencrypt /var/lib/letsencrypt /var/run/httpd /var/lib/httpd
+brc chmod -R g+rwx /var/log/httpd
 
-brc mkdir /var/log/letsencrypt
-brc mkdir -p /opt/app-root/src/.well-known/acme-challenge
-brc chmod -R g+rw /etc/letsencrypt /opt/app-root/src/.well-known \
-    /var/log/letsencrypt /var/lib/letsencrypt
-
+echo 'create scripts'
 #
 # create entrypoint starter script which starts nginx and runs certbot
 #
@@ -57,7 +63,7 @@ file=$(mktemp start-XXXX)
 cat > $file <<EOF
 #!/bin/env bash
 # start webserver
-/opt/rh/rh-nginx18/root/usr/sbin/nginx
+httpd
 
 label="${ROUTE_LABEL:-letsencrypt-me=true}"
 svcname="${CERTBOT_SERVICE_NAME:-certbot-ocp}"
@@ -96,7 +102,7 @@ while read route; do
   done
   if [ ! -d /etc/letsencrypt/live/\${ary[1]} ]; then
     echo asking for certs
-    /usr/bin/certbot certonly --webroot -w /opt/app-root/src \
+    certbot certonly --webroot -w /var/www/html \
     --agree-tos -m \$EMAIL --deploy-hook /opt/app-root/patch.sh \
     -n \$CERTBOT_EXTRA_OPTS \
     -d \${ary[1]}
@@ -105,7 +111,7 @@ while read route; do
 done < /tmp/routes.txt
 
 # renew all existing ones if needed
-/usr/bin/certbot renew --deploy-hook /opt/app-root/patch.sh
+certbot renew --deploy-hook /opt/app-root/patch.sh
 
 oc delete route -l certbot-ocp-delete-me-if-found-later=true
 
@@ -142,12 +148,12 @@ while read route; do
 done < /tmp/routes.txt
 
 if [[ -n "\${ROUTE}" && -n "\${CERTIFICATE}" && -n "\${CABUNDLE}" ]]; then
-  /usr/bin/oc patch "route/\${ROUTE}" \
+  oc patch "route/\${ROUTE}" \
    -p '{"spec":{"tls":{"certificate":"'"\${CERTIFICATE}"'", \
    "key":"'"\${KEY}"'", "caCertificate":"'"\${CABUNDLE}"'"}}}'
   expire_date=\$(openssl x509 -in \${CERT_FILE} -noout -enddate | cut -d= -f 2)
-  /usr/bin/oc patch "route/\${ROUTE}" \ 
-   -p '{"metadata":{"annotations": \ 
+  oc patch "route/\${ROUTE}" \
+   -p '{"metadata":{"annotations": \
    {"certbot-ocp/certiticate-expires":"'"\${expire_date}"'"}}}'
 else
   echo "problem with one of the variables:"
@@ -163,8 +169,19 @@ buildah copy $container $file /opt/app-root/patch.sh
 brc chmod g+rx /opt/app-root/patch.sh
 rm $file
 
-brc sh -c 'echo alive > /opt/app-root/src/.well-known/acme-challenge/alive.html'
+brc sh -c 'echo alive > /var/www/html/.well-known/acme-challenge/alive.html'
 
-buildah config --entrypoint /opt/app-root/certs.sh $container
+buildah config \
+  --entrypoint /opt/app-root/certs.sh \
+  --cmd '/opt/app-root/certs.sh' \
+  --author 'Ilkka Tengvall' \
+  --created-by 'Ilkka Tengvall' \
+  --comment 'Image is used in OpenShift for creating SSL certs. \
+    See https://github.com/ikke-t/cerbot-ocp' \
+  --port 8080 \
+  --volume /etc/letsencrypt \
+  --workingdir /opt/app-root \
+  $container
 
-buildah commit $container certbot-ocp:latest
+echo 'store container'
+buildah commit $container certbot-mini:latest
