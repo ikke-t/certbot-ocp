@@ -119,12 +119,12 @@ In pod-certbot-ocp.yaml and cronjob-certbot-ocp.yaml, change the values:
 and run:
 
 ```
-oc create -f manifests/role-certbot-ocp.yaml
 oc create -f manifests/sa-certbot-ocp.yaml
 oc adm policy add-role-to-user certbot-ocp -z certbot-ocp-sa
 oc create -f manifests/pvc-certbot-letsencrypt.yaml
 oc create -f manifests/pod-certbot-ocp.yaml
 oc create -f manifests/svc-certbot-ocp.yaml
+oc create -f manifests/cronjob-certbot-ocp.yaml
 ```
 
 Container runs once, and from container logs you can check did everything work. To check logs do following
@@ -140,6 +140,12 @@ oc delete po certbot-ocp && oc create -f manifests/pod-certbot-ocp.yaml
 ```
 
 CronJob will start certbot container once per day and renew certiciates if needed. You can change job interval by modifying manifests/cronjob-certbot-ocp.yaml. There a filed called schedule.
+
+To get more info about job runs run
+
+```
+oc get jobs
+```
 
 And to get rid of this alltogether, do:
 ```
