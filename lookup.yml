@@ -1,0 +1,22 @@
+- name: Set SSL Certs using Let\'s encrypt
+  hosts: all
+  gather_facts: false
+  vars:
+    #ansible_python_interpreter: /usr/bin/python3
+    project_name: foobar3
+  tasks:
+  - name: get routes
+    set_fact:
+      routes: "{{ lookup('k8s', namespace='foobar3', api_version='route.openshift.io/v1', kind='Route', label_selector='delete-me-when-done=true') }}"
+  - name: Delete route once done
+    k8s:
+      state: "absent"
+      host: "{{ api_url }}"
+      username: "{{ user }}"
+      api_key: "{{ api_key }}"
+      namespace: "{{ project_name }}"
+      definition:
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: "{{ routes.metadata.name }}"

@@ -11,7 +11,7 @@ spec:
     - name: EMAIL
       value: your_email@here.com
     - name: CERTBOT_EXTRA_OPTS
-      value: "--test"
+      value: ""
     image: quay.io/fevermap/certbot-ocp:latest
     imagePullPolicy: IfNotPresent
     name: certbot-ocp
