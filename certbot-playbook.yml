@@ -33,7 +33,7 @@
   vars:
     ansible_python_interpreter: /usr/bin/python3
     certbot_sa: certbot
-    cb_image: quay.io/fevermap/certbot-ocp:cronjob1
+    cb_image: quay.io/fevermap/certbot-ocp:latest
     cb_route_label: 'letsencrypt-me=true'
     cb_extra_opts: '--test'
   tasks:
