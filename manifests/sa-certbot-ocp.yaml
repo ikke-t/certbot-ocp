@@ -1,6 +1,7 @@
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  labels: 
+  labels:
     app: certbot-ocp
   name: certbot-ocp-sa

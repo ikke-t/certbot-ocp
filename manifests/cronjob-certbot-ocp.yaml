@@ -1,3 +1,4 @@
+---
 apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
@@ -20,23 +21,23 @@ spec:
             app: certbot-ocp
         spec:
           containers:
-          - env:
-            - name: EMAIL
-              value: your_email@example.com
-            - name: CERTBOT_EXTRA_OPTS
-              value: "--test"
-            image: quay.io/fevermap/certbot-ocp:latest
-            imagePullPolicy: IfNotPresent
-            name: certbot-ocp
-            ports:
-            - containerPort: 8080
-              protocol: TCP
-            resources: {}
-            terminationMessagePath: /dev/termination-log
-            terminationMessagePolicy: File
-            volumeMounts:
-            - mountPath: /etc/letsencrypt
-              name: letsencrypt
+            - env:
+                - name: EMAIL
+                  value: your_email@example.com
+                - name: CERTBOT_EXTRA_OPTS
+                  value: "--test"
+              image: quay.io/fevermap/certbot-ocp:latest
+              imagePullPolicy: IfNotPresent
+              name: certbot-ocp
+              ports:
+                - containerPort: 8080
+                  protocol: TCP
+              resources: {}
+              terminationMessagePath: /dev/termination-log
+              terminationMessagePolicy: File
+              volumeMounts:
+                - mountPath: /etc/letsencrypt
+                  name: letsencrypt
           dnsPolicy: ClusterFirst
           restartPolicy: Never
           schedulerName: default-scheduler
@@ -45,9 +46,9 @@ spec:
           serviceAccountName: certbot-ocp-sa
           terminationGracePeriodSeconds: 10
           volumes:
-          - name: letsencrypt
-            persistentVolumeClaim:
-              claimName: certbot-letsencrypt         
+            - name: letsencrypt
+              persistentVolumeClaim:
+                claimName: certbot-letsencrypt
   schedule: '0 23 * * *'
   successfulJobsHistoryLimit: 1
   suspend: false
