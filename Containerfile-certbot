@@ -65,7 +65,7 @@ brc chmod -R g+rwx /var/log/httpd
 
   echo 'create scripts'
 #
-# create entrypoint starter script which starts nginx and runs certbot
+# create entrypoint starter script which starts apache and runs certbot
 #
 file=$(mktemp start-XXXX)
 cat > $file <<EOF

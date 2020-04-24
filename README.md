@@ -1,7 +1,7 @@
 # cerbot-ocp
 
 Utility for creating and updating SSL certificates for routes in OpenShift
-project. Uses [Let's Encrypt certbot](https://certbot.eff.org/), NGINX and
+project. Uses [Let's Encrypt certbot](https://certbot.eff.org/), apache and
 OpenShift command line tools to fetch, update and install
 the certificates.
 
@@ -10,7 +10,7 @@ This utility container is stored at
 
 # How does it work?
 
-I created an container that runs NGINX and certbot. When the container starts
+I created an container that runs apache and certbot. When the container starts
 it scans all the routes in OpenShift project. Those routes that have been
 labeled with ```letsencrypt-me=true``` will be listed.
 
