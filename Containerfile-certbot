@@ -112,6 +112,8 @@ while read route; do
     sleep 2
     i=\$((\$i+1))
   done
+  echo Waiting things to settle down
+  sleep 5
   if [ ! -d /etc/letsencrypt/live/\${ary[1]} ]; then
     echo asking for certs
     certbot certonly --webroot -w /var/www/html \
