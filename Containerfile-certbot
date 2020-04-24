@@ -29,6 +29,14 @@ brc microdnf install openssl python3-pip httpd >/dev/null
 brc microdnf clean all
 brc sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
 
+# XXX fix below, I could not get httpd logs into stdout/stderr for some reason.
+brc sed -i  's,logs/access_log,/proc/self/fd/1,' /etc/httpd/conf/httpd.conf
+brc sed -i  's,logs/error_log,/proc/self/fd/2,' /etc/httpd/conf/httpd.conf
+#brc sed -i  's,logs/access_log,/dev/stdout,' /etc/httpd/conf/httpd.conf
+#brc sed -i  's,logs/error_log,/dev/stderr,' /etc/httpd/conf/httpd.conf
+#brc sed -i  's,"logs/access_log",!/bin/cat,' /etc/httpd/conf/httpd.conf
+#brc sed -i  's,"logs/error_log",!/bin/cat,' /etc/httpd/conf/httpd.conf
+
 #
 # Get oc command line client
 #
@@ -55,7 +63,7 @@ brc chmod -R g+rw /etc/letsencrypt /var/www/html/.well-known \
     /var/log/letsencrypt /var/lib/letsencrypt /var/run/httpd /var/lib/httpd
 brc chmod -R g+rwx /var/log/httpd
 
-echo 'create scripts'
+  echo 'create scripts'
 #
 # create entrypoint starter script which starts nginx and runs certbot
 #
@@ -81,6 +89,10 @@ i=0
 while read route; do
   echo \$route
   IFS=' ' read -ra ary <<< \$route
+  echo 'temporarily disable redirect for non TLS traffic'
+  oc patch "route/\${ary[0]}" \
+    -p '{"spec":{"tls": {"insecureEdgeTerminationPolicy":"Allow"}}}'
+
   echo "check if route for for \${ary[0]}-acme-challenge"
   if [ ! $(oc get route "\${ary[0]}-acme-challenge" &> /dev/null) ]; then
     echo "exposing service for \${ary[0]}-acme-challenge"
@@ -115,6 +127,13 @@ certbot renew --deploy-hook /opt/app-root/patch.sh
 
 oc delete route -l certbot-ocp-delete-me-if-found-later=true
 
+while read route; do
+  IFS=' ' read -ra ary <<< \$route
+  echo "enable back redirect for non TLS traffic for \${ary[0]}"
+  oc patch "route/\${ary[0]}" \
+    -p '{"spec":{"tls": {"insecureEdgeTerminationPolicy":"Redirect"}}}'
+done < /tmp/routes.txt
+
 EOF
 
 buildah copy $container $file /opt/app-root/certs.sh
@@ -129,6 +148,8 @@ cat > $file <<EOF
 #!/bin/env bash
 # just in case, get the renewed domains into array,
 # even though we should only get one.
+echo "patch working on: \${RENEWED_DOMAINS}"
+
 IFS=' ' read -ra fqdns <<< \$RENEWED_DOMAINS
 
 CERT_FILE=\${RENEWED_LINEAGE}/cert.pem
@@ -143,11 +164,13 @@ while read route; do
   IFS=' ' read -ra ary <<< \$route
     if [[ "\${fqdns[0]}" == "\${ary[1]}" ]]; then
       ROUTE=\${ary[0]}
+      echo "patch found route \${ROUTE}"
       break
     fi
 done < /tmp/routes.txt
 
 if [[ -n "\${ROUTE}" && -n "\${CERTIFICATE}" && -n "\${CABUNDLE}" ]]; then
+  echo "patching route \${ROUTE}"
   oc patch "route/\${ROUTE}" \
    -p '{"spec":{"tls":{"certificate":"'"\${CERTIFICATE}"'", \
    "key":"'"\${KEY}"'", "caCertificate":"'"\${CABUNDLE}"'"}}}'
@@ -184,4 +207,4 @@ buildah config \
   $container
 
 echo 'store container'
-buildah commit $container certbot-mini:latest
+buildah commit --format docker $container certbot-mini:latest
