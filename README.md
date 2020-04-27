@@ -151,3 +151,32 @@ And to get rid of this alltogether, do:
 ```
 oc delete svc,pod,role,sa,cronjob,job,pvc -l app=certbot-ocp
 ```
+
+## Install with Helm
+
+Add certbot chart
+
+```
+helm repo add certbot-ocp https://raw.githubusercontent.com/ikke-t/cerbot-ocp/master/charts
+```
+
+Install certbot-ocp (deployement called foobar in this case)
+
+```
+export DEPLOYMENT=foobar
+export YUOR_EMAIL=your_email@here.com
+helm install $DEPLOYMENT certbot-ocp --set letsencryptEmail=$YUOR_EMAIL
+```
+
+By default bot is running with --test flag, meaning that no real certificate is created. If everything is ok, delete pod and upgrade deployment
+
+```
+oc delete po $DEPLOYMENT-certbot-ocp
+helm upgrade $DEPLOYMENT certbot-ocp --set letsencryptEmail=$YUOR_EMAIL --set letsencryptExtraOpts=''
+```
+
+If you want to delete everything
+
+```
+helm uninstall $DEPLOYMENT
+```
