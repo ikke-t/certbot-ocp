@@ -1,0 +1,8 @@
+
+cronjobSchedule: 0 23 * * * 
+letsencyrptEmail: your_email@email.com
+letsencryptExtraOpts: --test
+persistentStorageSize: 1Gi
+image:
+  repository: quay.io/fevermap/certbot-ocp
+  pullPolicy: Always
