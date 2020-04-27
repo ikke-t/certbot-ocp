@@ -4,5 +4,5 @@ kind: ServiceAccount
 metadata:
   labels:
     app: certbot-ocp
-  name: {{ .Release.Name }}-certbot-ocp-sa
+  name: certbot-ocp-sa
   namespace: {{ .Release.Namespace }}
