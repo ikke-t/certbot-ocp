@@ -34,8 +34,8 @@ spec:
           name: letsencrypt
   dnsPolicy: ClusterFirst
   restartPolicy: Never
-  serviceAccount: {{ .Release.Name }}-certbot-ocp-sa
-  serviceAccountName: {{ .Release.Name }}-certbot-ocp-sa
+  serviceAccount: certbot-ocp-sa
+  serviceAccountName: certbot-ocp-sa
   terminationGracePeriodSeconds: 10
   volumes:
     - name: letsencrypt
