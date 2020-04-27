@@ -3,7 +3,7 @@ entries:
   certbot-ocp:
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2020-04-27T13:41:37.876215+03:00"
+    created: "2020-04-27T13:47:08.870211+03:00"
     description: A Helm chart to deploy certbot in a container to deploy Let's Encrypt
       certificate to OpenShift routes that have we labeled with letsencrypt-me=true.
       Deployment contains Pod that runs at install time and then CronJob tha by default
@@ -12,6 +12,6 @@ entries:
     name: certbot-ocp
     type: application
     urls:
-    - certbot-ocp-1.0.0.tgz
+    - https://github.com/tahonen/cerbot-ocp/blob/master/charts/certbot-ocp-1.0.0.tgz
     version: 1.0.0
-generated: "2020-04-27T13:41:37.872682+03:00"
+generated: "2020-04-27T13:47:08.866979+03:00"
