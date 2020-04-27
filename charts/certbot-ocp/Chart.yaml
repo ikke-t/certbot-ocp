@@ -13,7 +13,7 @@ type: application
 version: 1.0.0
 appVersion: 1.0.0
 kubeVersion: '>= 1.8'
-home: https://github.com/tahonen/cerbot-ocp/tree/master/charts/certbot-ocp
+home: http://github.com/ikke-t/certbot-ocp
 sources: 
 - http://github.com/ikke-t/certbot-ocp
 maintainers:

@@ -1,5 +1,10 @@
-1. Get started with certbot
+Get started with certbot
 
 Annotate route (route.openshift.io/v1) with label letsencrypt-me=true
-
 oc label route YOUR_ROUTE letsencrypt-me=true
+
+If you need to re-run certbot Pod you can delete existing pod
+oc delete po RELEASE_NAME-certbot-ocp 
+
+And then upgrade existing deployment
+helm upgrade RELEASE_NAME certbot-ocp
