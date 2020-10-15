@@ -1,4 +1,4 @@
-# cerbot-ocp
+# certbot-ocp
 
 Utility for creating and updating SSL certificates for routes in OpenShift
 project. Uses [Let's Encrypt certbot](https://certbot.eff.org/), apache and
